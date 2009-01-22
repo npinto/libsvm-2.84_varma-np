@@ -1,0 +1,104 @@
+--- svm.py	2009-01-20 22:39:08.000000000 -0500
++++ ../../libsvm-2.88_objs-np.github/python/svm.py	2009-01-20 19:44:28.000000000 -0500
+@@ -3,6 +3,9 @@
+ from svmc import LINEAR, POLY, RBF, SIGMOID, PRECOMPUTED
+ from math import exp, fabs
+ 
++#from IPython.Shell import IPShellEmbed
++#ipshell = IPShellEmbed()
++
+ def _int_array(seq):
+ 	size = len(seq)
+ 	array = svmc.new_int(size)
+@@ -62,6 +65,8 @@
+ 			setattr(self,attr,val)
+ 		for attr,val in kw.items():
+ 			setattr(self,attr,val)
++		if self.svm_type != C_SVC or self.kernel_type != PRECOMPUTED:
++			raise NotImplementedError, "svm_varma only implements C_SVC with a PRECOMPUTED kernel"
+ 
+ 	def __getattr__(self,attr):
+ 		get_func = getattr(svmc,'svm_parameter_%s_get' % (attr))
+@@ -165,39 +170,65 @@
+ 		svmc.svm_node_matrix_destroy(self.x_matrix)
+ 
+ class svm_model:
+-	def __init__(self,arg1,arg2=None):
+-		if arg2 == None:
+-			# create model from file
+-			filename = arg1
+-			self.model = svmc.svm_load_model(filename)
+-		else:
+-			# create model from problem and parameter
+-			prob,param = arg1,arg2
+-			self.prob = prob
+-			if param.gamma == 0:
+-				param.gamma = 1.0/prob.maxlen
+-			msg = svmc.svm_check_parameter(prob.prob,param.param)
+-			if msg: raise ValueError, msg
+-			self.model = svmc.svm_train(prob.prob,param.param)
++	def __init__(self, prob, param):
++		if param is None:
++			raise NotImplementedError, "svm_varma can't load a svm_model from a file (yet)"
++
++		self.prob = prob
++		if param.gamma == 0:
++			param.gamma = 1.0/prob.maxlen
++		msg = svmc.svm_check_parameter(prob.prob,param.param)
++		if msg: raise ValueError, msg
++		self.model = svmc.svm_train(prob.prob,param.param)
+ 
+ 		#setup some classwide variables
+-		self.nr_class = svmc.svm_get_nr_class(self.model)
++		self.nr_class = nr_class = svmc.svm_get_nr_class(self.model)
+ 		self.svm_type = svmc.svm_get_svm_type(self.model)
+ 		#create labels(classes)
+ 		intarr = svmc.new_int(self.nr_class)
+ 		svmc.svm_get_labels(self.model,intarr)
+-		self.labels = _int_array_to_list(intarr, self.nr_class)
++		self.labels = labels = _int_array_to_list(intarr, self.nr_class)
+ 		svmc.delete_int(intarr)
++		if len(labels) != 2:
++			raise NotImplementedError, "svm_varma doesn't handle problems with more than 2 labels (yet)"
+ 		#check if valid probability model
+ 		self.probability = svmc.svm_check_probability_model(self.model)
+ 
++		model = self.model
++		#self.obj = svmc.svm_get_obj(model, 0)
++		#self.rho = svmc.svm_get_rho(model, 0)
++		#self.nSV = svmc.svm_get_nSV(model, 0)
++		#self.total_sv = svmc.svm_get_total_sv(model)
++
++		# XXX: doesn't work for regression or one-class
++# 		sv_coef = []
++# 		for label in xrange(len(labels)-1):
++# 			size = self.total_sv
++# 			doublearr = svmc.new_double(size)
++# 			svmc.svm_get_sv_coef(model, label, doublearr)
++# 			coef = _double_array_to_list(doublearr, size)
++# 			sv_coef += [coef]
++# 			svmc.delete_double(doublearr)
++
++		# XXX: only works with PRECOMPUTED kernels
++		#size = self.total_sv * 
++		#size = prob.size
++		#doublearr = svmc.new_double(size)
++		#svmc.svm_get_SV(model, size, doublearr)
++		#self.SV = _double_array_to_list(doublearr, size)
++		#svmc.delete_double(doublearr)
++		#print self.SV
++		#raise
++		#doublearr = svmc.new_double(size)
++		
++		
++
+ 	def predict(self,x):
+ 		data = _convert_to_svm_node_array(x)
+ 		ret = svmc.svm_predict(self.model,data)
+ 		svmc.svm_node_array_destroy(data)
+ 		return ret
+ 
+-
+ 	def get_nr_class(self):
+ 		return self.nr_class
+ 
